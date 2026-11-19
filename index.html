@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yıldız Avcısı</title>
+<style>
+:root{--bg:#eef0f7;--fg:#1b1d2a;--muted:#5a5f7a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0b0d17;--fg:#e8eaf6;--muted:#9aa0c0}}
+:root[data-theme="dark"]{--bg:#0b0d17;--fg:#e8eaf6;--muted:#9aa0c0}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;overflow:hidden;touch-action:none}
+canvas{height:calc(100% - 56px);max-width:100%;aspect-ratio:2/3;border-radius:14px;background:#050714;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+p{margin:0;font-size:13px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<p>Ok tuşları / A-D veya parmağını sürükle · Başlamak için dokun ya da Boşluk</p>
+<script>
+const c=document.getElementById('c'),g=c.getContext('2d'),W=400,H=600;
+c.width=W;c.height=H;
+let best=0;
+try{best=+localStorage.getItem('yaBest')||0}catch(e){}
+const bg=[...Array(60)].map(()=>({x:Math.random()*W,y:Math.random()*H,s:Math.random()*1.5+.3}));
+let mode='menu',ship,items,score,lives,level,spawnT,inv,shake,target=null,last=0;
+const keys={};
+function reset(){ship={x:W/2,y:540};items=[];score=0;lives=3;level=1;spawnT=0;inv=0;shake=0;target=null}
+function start(){reset();mode='play'}
+function spawn(){
+  const star=Math.random()<.35;
+  const r=star?10:12+Math.random()*16;
+  const it={x:r+Math.random()*(W-2*r),y:-r,r,star,v:(star?2.2:2.5+Math.random()*1.5)+level*.35,rot:0,vr:(Math.random()-.5)*.08};
+  if(!star)it.shape=[...Array(9)].map(()=>.75+Math.random()*.3);
+  items.push(it);
+}
+function update(d){
+  bg.forEach(s=>{s.y+=s.s*d*(1+level*.15);if(s.y>H){s.y=0;s.x=Math.random()*W}});
+  if(mode!=='play')return;
+  const sp=6*d;
+  if(keys.ArrowLeft||keys.a){ship.x-=sp;target=null}
+  if(keys.ArrowRight||keys.d){ship.x+=sp;target=null}
+  if(target!==null)ship.x+=(target-ship.x)*Math.min(1,.25*d);
+  ship.x=Math.max(16,Math.min(W-16,ship.x));
+  spawnT-=d;
+  if(spawnT<=0){spawn();spawnT=Math.max(14,46-level*4)*(.7+Math.random()*.6)}
+  inv=Math.max(0,inv-d);shake=Math.max(0,shake-d);
+  for(const it of items){
+    it.y+=it.v*d;it.rot+=it.vr*d;
+    if(Math.hypot(it.x-ship.x,it.y-ship.y)<it.r+13){
+      it.dead=true;
+      if(it.star){score+=10;level=1+Math.floor(score/100)}
+      else if(inv<=0){lives--;inv=90;shake=15;if(lives<=0){mode='over';
+        if(score>best){best=score;try{localStorage.setItem('yaBest',best)}catch(e){}}}}
+    }
+    if(it.y>H+40)it.dead=true;
+  }
+  items=items.filter(i=>!i.dead);
+}
+function star(x,y,r,rot){
+  g.beginPath();
+  for(let i=0;i<10;i++){const a=rot+i*Math.PI/5-Math.PI/2,rr=i%2?r*.45:r;g.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr)}
+  g.closePath();
+}
+function text(t,y,size,col){g.fillStyle=col||'#fff';g.font='bold '+size+'px system-ui,sans-serif';g.textAlign='center';g.fillText(t,W/2,y)}
+function draw(){
+  g.save();
+  if(shake>0)g.translate((Math.random()-.5)*8,(Math.random()-.5)*8);
+  g.fillStyle='#050714';g.fillRect(-10,-10,W+20,H+20);
+  g.fillStyle='#fff';
+  bg.forEach(s=>{g.globalAlpha=.4+s.s/3;g.fillRect(s.x,s.y,s.s*1.4,s.s*1.4)});
+  g.globalAlpha=1;
+  for(const it of items){
+    if(it.star){g.fillStyle='#ffd23f';g.shadowColor='#ffd23f';g.shadowBlur=14;star(it.x,it.y,it.r,it.rot);g.fill();g.shadowBlur=0}
+    else{
+      g.fillStyle='#6b6f86';g.strokeStyle='#9a9fb8';g.lineWidth=2;g.beginPath();
+      it.shape.forEach((k,i)=>{const a=it.rot+i*Math.PI*2/9;g.lineTo(it.x+Math.cos(a)*it.r*k,it.y+Math.sin(a)*it.r*k)});
+      g.closePath();g.fill();g.stroke();
+    }
+  }
+  if(mode!=='menu'&&(mode==='play'||true)){
+    if(!(inv>0&&Math.floor(inv/5)%2)){
+      g.fillStyle='#4fd1ff';g.beginPath();
+      g.moveTo(ship.x,ship.y-18);g.lineTo(ship.x+14,ship.y+14);g.lineTo(ship.x,ship.y+7);g.lineTo(ship.x-14,ship.y+14);
+      g.closePath();g.fill();
+      g.fillStyle='#ff9f43';g.beginPath();g.moveTo(ship.x-4,ship.y+9);g.lineTo(ship.x,ship.y+9+8+Math.random()*6);g.lineTo(ship.x+4,ship.y+9);g.fill();
+    }
+  }
+  if(mode==='play'){
+    g.textAlign='left';g.fillStyle='#fff';g.font='bold 18px system-ui,sans-serif';g.fillText('Skor '+score,14,28);
+    g.textAlign='right';g.fillText('Seviye '+level,W-14,28);
+    g.textAlign='left';g.fillStyle='#ff6b81';g.fillText('♥'.repeat(lives),14,52);
+  }
+  if(mode==='menu'){
+    text('YILDIZ AVCISI',250,36,'#ffd23f');
+    text('Sarı yıldızları topla,',295,17);text('asteroitlerden kaç!',320,17);
+    text('Başlamak için dokun',390,18,'#4fd1ff');
+    if(best)text('En yüksek skor: '+best,430,15,'#9aa0c0');
+  }
+  if(mode==='over'){
+    g.fillStyle='rgba(5,7,20,.7)';g.fillRect(0,0,W,H);
+    text('OYUN BİTTİ',230,36,'#ff6b81');
+    text('Skor: '+score,280,22);
+    text('En yüksek: '+best,310,17,'#ffd23f');
+    text('Tekrar oynamak için dokun',380,17,'#4fd1ff');
+  }
+  g.restore();
+}
+function loop(t){
+  const d=Math.min(3,(t-last)/16.67||1);last=t;
+  update(d);draw();requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+function act(){if(mode!=='play')start()}
+addEventListener('keydown',e=>{
+  const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=true;
+  if(e.key===' '||e.key==='Enter'){act();e.preventDefault()}
+  if(e.key.startsWith('Arrow'))e.preventDefault();
+});
+addEventListener('keyup',e=>{keys[e.key.length===1?e.key.toLowerCase():e.key]=false});
+function pos(e){const r=c.getBoundingClientRect();target=(e.clientX-r.left)/r.width*W}
+c.addEventListener('pointerdown',e=>{act();pos(e)});
+c.addEventListener('pointermove',e=>{if(mode==='play'&&(e.buttons||e.pointerType==='touch'||e.pointerType==='mouse'))pos(e)});
+reset();mode='menu';
+</script>
+</body>
+</html>
